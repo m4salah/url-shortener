@@ -1,0 +1,6 @@
+-- init.sql
+CREATE TABLE IF NOT EXISTS url_table (
+  id SERIAL PRIMARY KEY,
+  url TEXT NOT NULL,
+  url_id CHAR(5) UNIQUE NOT NULL
+);
