@@ -11,7 +11,10 @@ pub struct HashRing<T: Clone> {
     virtual_nodes: usize,   // Number of virtual nodes per physical shard
 }
 
-impl<T: Clone> HashRing<T> {
+impl<T> HashRing<T>
+where
+    T: Clone,
+{
     /// Create a new consistent hash ring with the given shards and number of virtual nodes per shard
     pub fn new(virtual_nodes: usize) -> Self {
         Self {

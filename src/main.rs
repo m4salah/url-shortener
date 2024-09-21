@@ -1,4 +1,4 @@
-use std::{env, error::Error};
+use std::{borrow::Borrow, env, error::Error, rc::Rc};
 
 use clap::{command, Parser, Subcommand};
 use dotenvy::dotenv;
@@ -19,7 +19,7 @@ fn generate_short_id() -> String {
 }
 
 // Insert the URL into the appropriate shard
-async fn insert_url(hr: &HashRing<Pool<Postgres>>, url: &str) -> Result<String, sqlx::Error> {
+async fn insert_url(hr: &HashRing<Rc<Pool<Postgres>>>, url: &str) -> Result<String, sqlx::Error> {
     let url_id = generate_short_id();
     let pool = hr.get_shard(&url_id);
 
@@ -28,18 +28,21 @@ async fn insert_url(hr: &HashRing<Pool<Postgres>>, url: &str) -> Result<String, 
         url,
         url_id
     )
-    .execute(&pool)
+    .execute(pool.borrow())
     .await?;
 
     println!("Inserted URL '{}'", url);
     Ok(url_id)
 }
 
-async fn get_url(hr: &HashRing<Pool<Postgres>>, url_id: &str) -> Result<String, Box<dyn Error>> {
+async fn get_url(
+    hr: &HashRing<Rc<Pool<Postgres>>>,
+    url_id: &str,
+) -> Result<String, Box<dyn Error>> {
     let pool = hr.get_shard(&url_id);
     Ok(
         query_scalar!("SELECT url FROM url_table WHERE url_id = $1", url_id)
-            .fetch_optional(&pool)
+            .fetch_optional(pool.borrow())
             .await?
             .ok_or("No URL found")?,
     )
@@ -76,9 +79,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let pool1 = Pool::<Postgres>::connect(&env::var("DATABASE_URL1").unwrap()).await?;
     let pool2 = Pool::<Postgres>::connect(&env::var("DATABASE_URL2").unwrap()).await?;
     let pool3 = Pool::<Postgres>::connect(&env::var("DATABASE_URL3").unwrap()).await?;
-    hr.add(0, pool1);
-    hr.add(1, pool2);
-    hr.add(2, pool3);
+    hr.add(0, Rc::new(pool1));
+    hr.add(1, Rc::new(pool2));
+    hr.add(2, Rc::new(pool3));
 
     // Parse command line arguments using `clap`
     let cli = Cli::parse();
