@@ -67,6 +67,7 @@ enum Commands {
         url_id: String,
     },
 }
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     dotenv()?;
