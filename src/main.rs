@@ -6,16 +6,6 @@ use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use sha2::{Digest, Sha256};
 use sqlx::{query, query_scalar, Pool, Postgres};
 
-fn hash_str(s: &str) -> [u8; 8] {
-    let mut hasher = Sha256::new();
-    hasher.update(s);
-    let result = hasher.finalize();
-    // Convert the first 8 bytes of the 32-byte hash result into a fixed-size array of 8 bytes.
-    let mut bytes = [0u8; 8];
-    bytes.copy_from_slice(&result[..8]); // Copy the first 8 bytes of the hash result.
-    bytes
-}
-
 // Generate a short ID using the SHA-256 hash of the URL (first 5 chars)
 fn generate_short_id() -> String {
     let id: String = thread_rng()
@@ -28,7 +18,10 @@ fn generate_short_id() -> String {
 
 // Get shard number using consistent hashing
 fn get_shard_id(url_id: &str, num_shards: usize) -> usize {
-    let hash_value = u64::from_be_bytes(hash_str(url_id));
+    let mut hasher = Sha256::new();
+    hasher.update(url_id);
+    let result = hasher.finalize();
+    let hash_value = u64::from_be_bytes(result[..8].try_into().unwrap());
     (hash_value % num_shards as u64) as usize
 }
 
@@ -36,9 +29,9 @@ fn get_shard_id(url_id: &str, num_shards: usize) -> usize {
 async fn insert_url(
     pool_map: &HashMap<usize, Pool<Postgres>>,
     url: &str,
-    url_id: &str,
-) -> Result<(), sqlx::Error> {
-    let shard_id = get_shard_id(url_id, pool_map.len());
+) -> Result<String, sqlx::Error> {
+    let url_id = generate_short_id();
+    let shard_id = get_shard_id(&url_id, pool_map.len());
     let pool = pool_map.get(&shard_id).unwrap();
 
     query!(
@@ -50,7 +43,7 @@ async fn insert_url(
     .await?;
 
     println!("Inserted URL '{}' into shard {}", url, shard_id + 1);
-    Ok(())
+    Ok(url_id)
 }
 
 async fn get_url(
@@ -90,7 +83,6 @@ enum Commands {
         url_id: String,
     },
 }
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     dotenv()?;
@@ -111,8 +103,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Match on the command (Insert or Get)
     match &cli.command {
         Commands::Insert { url } => {
-            let url_id = generate_short_id();
-            insert_url(&pool_map, &url, &url_id).await?;
+            let url_id = insert_url(&pool_map, &url).await?;
             println!("URL ID: {}", url_id);
         }
         Commands::Get { url_id } => {
