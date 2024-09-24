@@ -1630,9 +1630,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "dotenvy",
- "hex",
  "rand",
- "sha2",
  "sqlx",
  "tokio",
 ]
